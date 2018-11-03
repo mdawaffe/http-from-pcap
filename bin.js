@@ -3,6 +3,7 @@
 const fs = require( 'fs' )
 const path = require( 'path' )
 
+const chalk = require( 'chalk' )
 const pcap = require( 'pcap' )
 const HTTPFromPCAP = require( '.' )
 
@@ -23,18 +24,28 @@ if ( pcap.findalldevs().map( device => device.name ).includes( deviceOrPath ) ) 
 
 const httpFromPCAP = new HTTPFromPCAP( pcapSession )
 
+function headerFromRawHeaders( rawHeaders ) {
+	return rawHeaders
+		.map( ( part, i, all ) => [ part, all[i+1] || false ] )
+		.filter( ( header, i ) => !( i % 2 ) )
+		.map( ( [ k, v ] ) => `${k}: ${v}` )
+		.join( '\n' )
+}
+
 httpFromPCAP.on( 'http', http => {
-	http.on( 'request headers', request => {
-		console.log( 'REQUEST: ', request )
-	} )
 	http.on( 'request message', request => {
-		request.pipe( process.stderr )
+		console.log( chalk.bold( '%s -> %s' ), request.src, request.dst )
+		console.log( chalk.blue.bold( '%s %s HTTP/%s' ), request.method, request.url, request.httpVersion )
+		console.log( chalk.blue( headerFromRawHeaders( request.rawHeaders ) ) )
+		console.log()
+		request.pipe( process.stdout )
 	} )
 
-	http.on( 'response headers', response => {
-		console.log( 'RESPONSE:', response )
-	} )
 	http.on( 'response message', response => {
-		response.pipe( process.stderr )
+		console.log( chalk.bold( '%s <- %s' ), response.src, response.dst )
+		console.log( chalk.blue.bold( 'HTTP/%s %d %s' ), response.httpVersion, response.statusCode, response.statusMessage )
+		console.log( chalk.blue( headerFromRawHeaders( response.rawHeaders ) ) )
+		console.log()
+		response.pipe( process.stdout )
 	} )
 } )
