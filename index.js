@@ -119,11 +119,13 @@ class HTTPResponse extends HTTPMessage {
 	constructor( { src, dst, isn } ) {
 		super( HTTPParser.RESPONSE, src, dst, isn )
 
-		this.status = 0
+		this.statusCode = 0
+		this.statusMessage = ''
 	}
 
 	onHeadersComplete( info ) {
-		this.status = info.statusCode
+		this.statusCode = info.statusCode
+		this.statusMessage = info.statusMessage
 	}
 }
 
