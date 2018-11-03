@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 const pcap = require( 'pcap' )
 const HTTPFromPCAP = require( '.' )
 
