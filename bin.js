@@ -32,6 +32,8 @@ function headerFromRawHeaders( rawHeaders ) {
 		.join( '\n' )
 }
 
+
+// @TODO: need to serialize these writes
 httpFromPCAP.on( 'http', http => {
 	http.on( 'request message', request => {
 		console.log( chalk.bold( '%s -> %s' ), request.src, request.dst )
