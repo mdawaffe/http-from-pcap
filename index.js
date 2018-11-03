@@ -59,7 +59,7 @@ class HTTPMessage extends Readable {
 		this.rawHeaders = rawHeaders || this.rawHeaders
 		let headers = {}
 		for ( let i = 0, l = rawHeaders.length; i < l; i +=2 ) {
-			headers[rawHeaders[i]] = rawHeaders[i + 1]
+			headers[rawHeaders[i].toLowerCase()] = rawHeaders[i + 1]
 		}
 
 		this.headers = headers
