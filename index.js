@@ -56,10 +56,10 @@ class HTTPMessage extends Readable {
 	_onHeadersComplete( versionMajor, versionMinor, rawHeaders, method, url, statusCode, statusMessage, upgrade, shouldKeepAlive ) {
 		this.httpVersion = versionMajor + '.' + versionMinor
 
-		const theRawHeaders = rawHeaders || this.rawHeaders
+		this.rawHeaders = rawHeaders || this.rawHeaders
 		let headers = {}
-		for ( let i = 0, l = theRawHeaders.length; i < l; i +=2 ) {
-			headers[theRawHeaders[i]] = theRawHeaders[i + 1]
+		for ( let i = 0, l = rawHeaders.length; i < l; i +=2 ) {
+			headers[rawHeaders[i]] = rawHeaders[i + 1]
 		}
 
 		this.headers = headers
