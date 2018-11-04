@@ -4,18 +4,17 @@ const { methods, HTTPParser } = process.binding( 'http_parser' ) // may have to 
 const { freeParser } = require( '_http_common' )
 
 const EventEmitter = require( 'events' )
-const { Readable } = require( 'stream' )
 
 const pcap = require( 'pcap' )
 
 class HTTPFromPCAP extends EventEmitter {
-	constructor( pcapSession ) {
+	constructor( pcapSession, { trackBodies } ) {
 		super()
 
 		this.tcpTracker = new pcap.TCPTracker()
 
 		this.tcpTracker.on( 'session', session => {
-			this.emit( 'http', new HTTPFromTCP( session ) )
+			this.emit( 'http', new HTTPFromTCP( session, { trackBodies } ) )
 		} )
 
 		pcapSession.on( 'packet', raw => {
@@ -25,8 +24,8 @@ class HTTPFromPCAP extends EventEmitter {
 	}
 }
 
-class HTTPMessage extends Readable {
-	constructor( type, src, dst, isn ) {
+class HTTPMessage extends EventEmitter {
+	constructor( type, src, dst, isn, trackBodies ) {
 		super()
 
 		this.parser = new HTTPParser( type )
@@ -43,7 +42,7 @@ class HTTPMessage extends Readable {
 
 		this.parser[HTTPParser.kOnHeaders] = this.onHeaders.bind( this )
 		this.parser[HTTPParser.kOnHeadersComplete] = this._onHeadersComplete.bind( this )
-		this.parser[HTTPParser.kOnBody] = this.onBody.bind( this )
+		this.parser[HTTPParser.kOnBody] = trackBodies ? this.onBody.bind( this ) : () => {}
 		this.parser[HTTPParser.kOnMessageComplete] = this.onMessageComplete.bind( this )
 		this.parser[HTTPParser.kOnExecute] = this.onExecute.bind( this )
 	}
@@ -78,7 +77,6 @@ class HTTPMessage extends Readable {
 	}
 
 	onMessageComplete() {
-		this.chunks.push( null )
 		this.emit( 'http message', this )
 	}
 
@@ -89,23 +87,11 @@ class HTTPMessage extends Readable {
 	free() {
 		freeParser( this.parser )
 	}
-
-	_read( size ) {
-		let more = false
-		do {
-			const chunk = this.chunks.shift()
-			if ( 'undefined' === typeof chunk ) {
-				break
-			}
-
-			more = this.push( chunk )
-		} while ( more )
-	}
 }
 
 class HTTPRequest extends HTTPMessage {
-	constructor( { src, dst, isn } ) {
-		super( HTTPParser.REQUEST, src, dst, isn )
+	constructor( { src, dst, isn, trackBodies } ) {
+		super( HTTPParser.REQUEST, src, dst, isn, trackBodies )
 
 		this.method = ''
 	}
@@ -116,8 +102,8 @@ class HTTPRequest extends HTTPMessage {
 }
 
 class HTTPResponse extends HTTPMessage {
-	constructor( { src, dst, isn } ) {
-		super( HTTPParser.RESPONSE, src, dst, isn )
+	constructor( { src, dst, isn, trackBodies } ) {
+		super( HTTPParser.RESPONSE, src, dst, isn, trackBodies )
 
 		this.statusCode = 0
 		this.statusMessage = ''
@@ -130,13 +116,14 @@ class HTTPResponse extends HTTPMessage {
 }
 
 class HTTPFromTCP extends EventEmitter {
-	constructor( tcpSession ) {
+	constructor( tcpSession, { trackBodies } ) {
 		super()
 
 		const request = new HTTPRequest( {
 			src: tcpSession.src_name,
 			dst: tcpSession.dst_name,
 			isn: tcpSession.send_isn,
+			trackBodies,
 		} )
 
 		request.on( 'http headers', request => {
@@ -155,6 +142,7 @@ class HTTPFromTCP extends EventEmitter {
 			src: tcpSession.src_name,
 			dst: tcpSession.dst_name,
 			isn: tcpSession.send_isn,
+			trackBodies,
 		} )
 
 		response.on( 'http headers', response => {

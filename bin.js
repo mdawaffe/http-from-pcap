@@ -2,7 +2,6 @@
 
 const fs = require( 'fs' )
 const path = require( 'path' )
-const { pipeline, Transform, Readable, PassThrough } = require( 'stream' )
 const { format } = require( 'util' )
 
 const chalk = require( 'chalk' )
@@ -31,14 +30,14 @@ Arguments:
 let pcapSession
 if ( pcap.findalldevs().map( device => device.name ).includes( deviceOrPath ) ) {
 	pcapSession = pcap.createSession( deviceOrPath, filter )
-} else if ( fs.existsSync( deviceOrPath ) ) {
+} else if ( '-' === deviceOrPath || fs.existsSync( deviceOrPath ) ) {
 	pcapSession = pcap.createOfflineSession( deviceOrPath, filter )
 } else {
 	console.error( help() )
 	process.exit( 1 )
 }
 
-const httpFromPCAP = new HTTPFromPCAP( pcapSession )
+const httpFromPCAP = new HTTPFromPCAP( pcapSession, { trackBodies: showBody } )
 
 function headerFromRawHeaders( rawHeaders ) {
 	return rawHeaders
@@ -48,70 +47,40 @@ function headerFromRawHeaders( rawHeaders ) {
 		.join( '\n' )
 }
 
-class PrettifyMessage extends Transform {
-	constructor( message ) {
-		super()
+function prettifyMessage( message ) {
+	const contentType = message.headers['content-type'] || ''
 
-		this.chunks = []
+	const body = message.chunks
 
-		this.contentType = message.headers['content-type'] || ''
-
-		// @todo?
-		if ( ~ this.contentType.indexOf( 'json' ) ) {
-			this._transform = this._transform_json.bind( this )
-			this._flush = this._flush_json.bind( this )
-		} else {
-			this._transform = this._transform_noop.bind( this )
-		}
+	// @todo?
+	if ( ! ( ~ contentType.indexOf( 'json' ) ) ) {
+		return body
 	}
 
-	_transform_noop( chunk, encoding, callback ) {
-		callback( null, chunk )
-	}
-
-	_transform_json( chunk, encoding, callback ) {
-		this.chunks.push( chunk )
-		callback()
-	}
-
-	_flush_json( callback ) {
-		try {
-			const serialized = this.chunks.reduce( ( serialized, chunk ) => serialized + chunk.toString( 'utf-8' ), '' )
-			const object = JSON.parse( serialized )
-			this.push( JSON.stringify( object, null, '  ' ) )
-		} catch( err ) {
-			return callback( err )
-		}
-
-		callback()
+	try {
+		const serialized = body.reduce( ( serialized, chunk ) => serialized + chunk.toString( 'utf8' ), '' )
+		const object = JSON.parse( serialized )
+		return [ Buffer.from( JSON.stringify( object, null, '  ' ), 'utf8' ) ]
+	} catch ( err ) {
+		return body
 	}
 }
 
-async function displayMessage( header, message ) {
+function displayMessage( header, message ) {
 	header += '\n' + chalk.blue( headerFromRawHeaders( message.rawHeaders ) ) + '\n'
 
 	if ( showBody ) {
-		const streams = [ message, prettify ? new PrettifyMessage( message ) : new PassThrough ]
+		const body = prettify ? prettifyMessage( message ) : message.chunks
 
-		const bodyReadable = pipeline( streams, err => {
-			if ( err ) {
-				return console.error( err )
+		if ( body ) {
+			console.log( header + '\n' )
+			for ( const chunk of body ) {
+				process.stdout.write( chunk )
 			}
-
-			const chunks = []
-			bodyReadable.on( 'data', chunk => {
-				chunks.push( chunk )
-			} )
-
-			bodyReadable.on( 'end', () => {
-				const body = chunks.map( chunk => chunk.toString() ).join( '' )
-				if ( body ) {
-					console.log( header + '\n' + body + '\n' )
-				} else {
-					console.log( header + '\n' )
-				}
-			} )
-		} )
+			console.log( '\n' )
+		} else {
+			console.log( header + '\n' )
+		}
 	} else {
 		console.log( header )
 	}
