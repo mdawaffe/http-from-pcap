@@ -158,6 +158,9 @@ class HTTPFromTCP extends EventEmitter {
 
 
 		tcpSession.on( 'end', () => {
+			request.parser.execute( Buffer.from( '' ), 0, 0 )
+			response.parser.execute( Buffer.from( '' ), 0, 0 )
+
 			request.free()
 			response.free()
 		} )
